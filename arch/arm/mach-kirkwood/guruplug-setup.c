@@ -19,7 +19,6 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <mach/kirkwood.h>
-#include <plat/mvsdio.h>
 #include "common.h"
 #include "mpp.h"
 
@@ -57,12 +56,14 @@ static struct mvsdio_platform_data guruplug_mvsdio_data = {
 
 static struct gpio_led guruplug_led_pins[] = {
 	{
-		.name			= "guruplug:red:health",
+		.name			= "status:red:fault",
+		.default_trigger	= "none",
 		.gpio			= 46,
 		.active_low		= 1,
 	},
 	{
-		.name			= "guruplug:green:health",
+		.name			= "status:green:health",
+		.default_trigger	= "default-on",
 		.gpio			= 47,
 		.active_low		= 1,
 	},

@@ -58,7 +58,7 @@ static struct mvsdio_platform_data sheeva_esata_mvsdio_data = {
 
 static struct gpio_led sheevaplug_led_pins[] = {
 	{
-		.name			= "plug:green:health",
+		.name			= "status:green:health",
 		.default_trigger	= "default-on",
 		.gpio			= 49,
 		.active_low		= 1,
