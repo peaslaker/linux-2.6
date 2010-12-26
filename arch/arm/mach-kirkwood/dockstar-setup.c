@@ -98,14 +98,13 @@ static void __init dockstar_init(void)
 	    gpio_direction_output(29, 1) != 0)
 		printk(KERN_ERR "can't set up GPIO 29 (USB Power Enable)\n");
 	kirkwood_ehci_init();
+
 	kirkwood_ge00_init(&dockstar_ge00_data);
 
 	platform_device_register(&dockstar_leds);
 }
 
 MACHINE_START(DOCKSTAR, "Seagate FreeAgent DockStar")
-	.phys_io	= KIRKWOOD_REGS_PHYS_BASE,
-	.io_pg_offst	= ((KIRKWOOD_REGS_VIRT_BASE) >> 18) & 0xfffc,
 	.boot_params	= 0x00000100,
 	.init_machine	= dockstar_init,
 	.map_io		= kirkwood_map_io,
