@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ struct inode *au_igrab(struct inode *inode)
 {
 	if (inode) {
 		AuDebugOn(!atomic_read(&inode->i_count));
-		atomic_inc(&inode->i_count);
+		ihold(inode);
 	}
 	return inode;
 }
@@ -244,14 +244,17 @@ out:
 	return err;
 }
 
-/* successful returns with iinfo write_locked */
-static int reval_inode(struct inode *inode, struct dentry *dentry, int *matched)
+/*
+ * successful returns with iinfo write_locked
+ * minus: errno
+ * zero: success, matched
+ * plus: no error, but unmatched
+ */
+static int reval_inode(struct inode *inode, struct dentry *dentry)
 {
 	int err;
 	aufs_bindex_t bindex, bend;
 	struct inode *h_inode, *h_dinode;
-
-	*matched = 0;
 
 	/*
 	 * before this function, if aufs got any iinfo lock, it must be only
@@ -262,14 +265,13 @@ static int reval_inode(struct inode *inode, struct dentry *dentry, int *matched)
 	if (unlikely(inode->i_ino == parent_ino(dentry)))
 		goto out;
 
-	err = 0;
+	err = 1;
 	ii_write_lock_new_child(inode);
 	h_dinode = au_h_dptr(dentry, au_dbstart(dentry))->d_inode;
 	bend = au_ibend(inode);
 	for (bindex = au_ibstart(inode); bindex <= bend; bindex++) {
 		h_inode = au_h_iptr(inode, bindex);
 		if (h_inode && h_inode == h_dinode) {
-			*matched = 1;
 			err = 0;
 			if (au_iigen_test(inode, au_digen(dentry)))
 				err = au_refresh_hinode(inode, dentry);
@@ -324,7 +326,7 @@ struct inode *au_new_inode(struct dentry *dentry, int must_new)
 	struct super_block *sb;
 	struct mutex *mtx;
 	ino_t h_ino, ino;
-	int err, match;
+	int err;
 	aufs_bindex_t bstart;
 
 	sb = dentry->d_sb;
@@ -372,9 +374,17 @@ new_ino:
 			goto out; /* success */
 		}
 
-		ii_write_unlock(inode);
+		/*
+		 * iget_failed() calls iput(), but we need to call
+		 * ii_write_unlock() after iget_failed(). so dirty hack for
+		 * i_count.
+		 */
+		atomic_inc(&inode->i_count);
 		iget_failed(inode);
-		goto out_err;
+		ii_write_unlock(inode);
+		au_xino_write(sb, bstart, h_ino, /*ino*/0);
+		/* ignore this error */
+		goto out_iput;
 	} else if (!must_new && !IS_DEADDIR(inode) && inode->i_nlink) {
 		/*
 		 * horrible race condition between lookup, readdir and copyup
@@ -382,13 +392,15 @@ new_ino:
 		 */
 		if (mtx)
 			mutex_unlock(mtx);
-		err = reval_inode(inode, dentry, &match);
+		err = reval_inode(inode, dentry);
+		if (unlikely(err < 0)) {
+			mtx = NULL;
+			goto out_iput;
+		}
+
 		if (!err) {
 			mtx = NULL;
 			goto out; /* success */
-		} else if (match) {
-			mtx = NULL;
-			goto out_iput;
 		} else if (mtx)
 			mutex_lock(mtx);
 	}
@@ -409,7 +421,6 @@ new_ino:
 
 out_iput:
 	iput(inode);
-out_err:
 	inode = ERR_PTR(err);
 out:
 	if (mtx)

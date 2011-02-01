@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -555,6 +555,10 @@ static int au_may_ren(struct au_ren_args *a)
 	if (a->dst_bstart != a->btgt)
 		goto out;
 
+	err = -ENOTEMPTY;
+	if (unlikely(a->dst_h_dentry == a->h_trap))
+		goto out;
+
 	err = -EIO;
 	h_inode = a->dst_h_dentry->d_inode;
 	isdir = !!au_ftest_ren(a->flags, ISDIR);
@@ -570,10 +574,6 @@ static int au_may_ren(struct au_ren_args *a)
 				 isdir);
 		if (unlikely(err))
 			goto out;
-		err = -ENOTEMPTY;
-		if (unlikely(a->dst_h_dentry == a->h_trap))
-			goto out;
-		err = 0;
 	}
 
 out:

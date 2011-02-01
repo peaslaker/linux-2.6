@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -744,7 +744,7 @@ static void call_unlink(void *args)
 		dget(d);
 	h_inode = d->d_inode;
 	if (h_inode)
-		atomic_inc(&h_inode->i_count);
+		ihold(h_inode);
 
 	*a->errp = vfs_unlink(a->dir, d);
 	if (!*a->errp) {

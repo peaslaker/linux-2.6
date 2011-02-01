@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -54,7 +54,7 @@ struct file *au_h_open(struct dentry *dentry, aufs_bindex_t bindex, int flags,
 	h_inode = h_dentry->d_inode;
 	if (au_test_nfsd() && !h_inode)
 		goto out;
-	if (unlikely((!d_unhashed(dentry) && au_d_removed(h_dentry))
+	if (unlikely((!d_unhashed(dentry) && d_unlinked(h_dentry))
 		     || !h_inode
 		     /* || !dentry->d_inode->i_nlink */
 		    ))
@@ -65,7 +65,7 @@ struct file *au_h_open(struct dentry *dentry, aufs_bindex_t bindex, int flags,
 	h_file = ERR_PTR(-EACCES);
 	exec_flag = flags & vfsub_fmode_to_uint(FMODE_EXEC);
 	if (exec_flag && (br->br_mnt->mnt_flags & MNT_NOEXEC))
-			goto out;
+		goto out;
 
 	/* drop flags for writing */
 	if (au_test_ro(sb, bindex, dentry->d_inode))
@@ -375,7 +375,7 @@ static int au_file_refresh_by_inode(struct file *file, int *need_reopen)
 	sb = dentry->d_sb;
 	inode = dentry->d_inode;
 	bstart = au_ibstart(inode);
-	if (bstart == finfo->fi_btop)
+	if (bstart == finfo->fi_btop || IS_ROOT(dentry))
 		goto out;
 
 	parent = dget_parent(dentry);
@@ -461,7 +461,7 @@ static void au_do_refresh_dir(struct file *file)
 	}
 
 	p = fidir->fd_hfile;
-	if (!au_test_mmapped(file) && !au_d_removed(file->f_dentry)) {
+	if (!au_test_mmapped(file) && !d_unlinked(file->f_dentry)) {
 		bend = au_sbend(sb);
 		for (finfo->fi_btop = 0; finfo->fi_btop <= bend;
 		     finfo->fi_btop++, p++)
@@ -525,7 +525,7 @@ static int refresh_file(struct file *file, int (*reopen)(struct file *file))
 	need_reopen = 1;
 	if (!au_test_mmapped(file))
 		err = au_file_refresh_by_inode(file, &need_reopen);
-	if (!err && need_reopen && !au_d_removed(dentry))
+	if (!err && need_reopen && !d_unlinked(dentry))
 		err = reopen(file);
 	if (!err) {
 		au_update_figen(file);

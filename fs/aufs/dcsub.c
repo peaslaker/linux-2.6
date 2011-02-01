@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -181,6 +181,18 @@ out:
 	spin_unlock(&dcache_lock);
 
 	return err;
+}
+
+static inline int au_dcsub_dpages_aufs(struct dentry *dentry, void *arg)
+{
+	return au_di(dentry) && dentry->d_sb == arg;
+}
+
+int au_dcsub_pages_rev_aufs(struct au_dcsub_pages *dpages,
+			    struct dentry *dentry, int do_include)
+{
+	return au_dcsub_pages_rev(dpages, dentry, do_include,
+				  au_dcsub_dpages_aufs, dentry->d_sb);
 }
 
 int au_test_subdir(struct dentry *d1, struct dentry *d2)

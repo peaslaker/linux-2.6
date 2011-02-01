@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -232,8 +232,7 @@ static int au_wbr_nonopq(struct dentry *dentry, aufs_bindex_t bindex)
 	if (unlikely(err))
 		goto out;
 	parent = dget_parent(dentry);
-	err = au_dcsub_pages_rev(&dpages, parent, /*do_include*/0, /*test*/NULL,
-				 /*arg*/NULL);
+	err = au_dcsub_pages_rev_aufs(&dpages, parent, /*do_include*/0);
 	if (unlikely(err))
 		goto out_free;
 

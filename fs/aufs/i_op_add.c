@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -560,9 +560,8 @@ int aufs_link(struct dentry *src_dentry, struct inode *dir,
 		au_cpup_attr_timesizes(dir);
 	inc_nlink(inode);
 	inode->i_ctime = dir->i_ctime;
-	if (!d_unhashed(a->h_path.dentry))
-		d_instantiate(dentry, au_igrab(inode));
-	else
+	d_instantiate(dentry, au_igrab(inode));
+	if (d_unhashed(a->h_path.dentry))
 		/* some filesystem calls d_drop() */
 		d_drop(dentry);
 	goto out_unpin; /* success */

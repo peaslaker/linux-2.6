@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -197,7 +197,7 @@ out:
 /* seq_file will re-call me in case of too long string */
 static int aufs_show_options(struct seq_file *m, struct vfsmount *mnt)
 {
-	int err, n;
+	int err;
 	unsigned int mnt_flags, v;
 	struct super_block *sb;
 	struct au_sbinfo *sbinfo;
@@ -255,8 +255,8 @@ static int aufs_show_options(struct seq_file *m, struct vfsmount *mnt)
 
 	AuUInt(DIRWH, dirwh, sbinfo->si_dirwh);
 
-	n = jiffies_to_msecs(sbinfo->si_rdcache) / MSEC_PER_SEC;
-	AuUInt(RDCACHE, rdcache, n);
+	v = jiffies_to_msecs(sbinfo->si_rdcache) / MSEC_PER_SEC;
+	AuUInt(RDCACHE, rdcache, v);
 
 	AuUInt(RDBLK, rdblk, sbinfo->si_rdblk);
 	AuUInt(RDHASH, rdhash, sbinfo->si_rdhash);
@@ -502,7 +502,7 @@ static int au_do_refresh_d(struct dentry *dentry, unsigned int sigen,
 	struct dentry *parent;
 	struct inode *inode;
 
-	err = -EIO;
+	err = 0;
 	parent = dget_parent(dentry);
 	if (!au_digen_test(parent, sigen) && au_digen_test(dentry, sigen)) {
 		inode = dentry->d_inode;
@@ -521,6 +521,7 @@ static int au_do_refresh_d(struct dentry *dentry, unsigned int sigen,
 	}
 	dput(parent);
 
+	AuTraceErr(err);
 	return err;
 }
 
@@ -601,8 +602,11 @@ out:
 static void au_remount_refresh(struct super_block *sb)
 {
 	int err, e;
+	unsigned int udba;
+	aufs_bindex_t bindex, bend;
 	struct dentry *root;
 	struct inode *inode;
+	struct au_branch *br;
 
 	au_sigen_inc(sb);
 	au_fclr_si(au_sbi(sb), FAILED_REFRESH_DIR);
@@ -611,6 +615,17 @@ static void au_remount_refresh(struct super_block *sb)
 	DiMustNoWaiters(root);
 	inode = root->d_inode;
 	IiMustNoWaiters(inode);
+
+	udba = au_opt_udba(sb);
+	bend = au_sbend(sb);
+	for (bindex = 0; bindex <= bend; bindex++) {
+		br = au_sbr(sb, bindex);
+		err = au_hnotify_reset_br(udba, br, br->br_perm);
+		if (unlikely(err))
+			AuIOErr("hnotify failed on br %d, %d, ignored\n",
+				bindex, err);
+		/* go on even if err */
+	}
 	au_hn_reset(inode, au_hi_flags(inode, /*isdir*/1));
 
 	di_write_unlock(root);
@@ -622,6 +637,9 @@ static void au_remount_refresh(struct super_block *sb)
 	di_write_lock_child(root);
 
 	au_cpup_attr_all(inode, /*force*/1);
+
+	if (unlikely(err))
+		AuIOErr("refresh failed, ignored, %d\n", err);
 }
 
 /* stop extra interpretation of errno in mount(8), and strange error messages */
@@ -840,24 +858,27 @@ out:
 
 /* ---------------------------------------------------------------------- */
 
-static int aufs_get_sb(struct file_system_type *fs_type, int flags,
-		       const char *dev_name __maybe_unused, void *raw_data,
-		       struct vfsmount *mnt)
+static struct dentry *aufs_mount(struct file_system_type *fs_type, int flags,
+				 const char *dev_name __maybe_unused,
+				 void *raw_data)
 {
-	int err;
+	struct dentry *root;
 	struct super_block *sb;
 
 	/* all timestamps always follow the ones on the branch */
 	/* mnt->mnt_flags |= MNT_NOATIME | MNT_NODIRATIME; */
-	err = get_sb_nodev(fs_type, flags, raw_data, aufs_fill_super, mnt);
-	if (!err) {
-		sb = mnt->mnt_sb;
-		si_write_lock(sb, !AuLock_FLUSH);
-		sysaufs_brs_add(sb, 0);
-		si_write_unlock(sb);
-		au_sbilist_add(sb);
-	}
-	return err;
+	root = mount_nodev(fs_type, flags, raw_data, aufs_fill_super);
+	if (IS_ERR(root))
+		goto out;
+
+	sb = root->d_sb;
+	si_write_lock(sb, !AuLock_FLUSH);
+	sysaufs_brs_add(sb, 0);
+	si_write_unlock(sb);
+	au_sbilist_add(sb);
+
+out:
+	return root;
 }
 
 static void aufs_kill_sb(struct super_block *sb)
@@ -878,8 +899,6 @@ static void aufs_kill_sb(struct super_block *sb)
 			au_plink_put(sb, /*verbose*/1);
 		au_xino_clr(sb);
 		aufs_write_unlock(sb->s_root);
-
-		au_plink_maint_leave(sbinfo);
 		au_nwt_flush(&sbinfo->si_nowait);
 	}
 	generic_shutdown_super(sb);
@@ -890,7 +909,7 @@ struct file_system_type aufs_fs_type = {
 	.fs_flags	=
 		FS_RENAME_DOES_D_MOVE	/* a race between rename and others */
 		| FS_REVAL_DOT,		/* for NFS branch and udba */
-	.get_sb		= aufs_get_sb,
+	.mount		= aufs_mount,
 	.kill_sb	= aufs_kill_sb,
 	/* no need to __module_get() and module_put(). */
 	.owner		= THIS_MODULE,
