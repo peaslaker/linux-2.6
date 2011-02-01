@@ -110,8 +110,6 @@ static void __init goflexnet_init(void)
 
 MACHINE_START(GOFLEXNET, "Seagate GoFlex Net")
 	/* Maintainer: Peter Carmichael <peterjncarm@ovi.com> */
-	.phys_io	= KIRKWOOD_REGS_PHYS_BASE,
-	.io_pg_offst	= ((KIRKWOOD_REGS_VIRT_BASE) >> 18) & 0xfffc,
 	.boot_params	= 0x00000100,
 	.init_machine	= goflexnet_init,
 	.map_io		= kirkwood_map_io,
