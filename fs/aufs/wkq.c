@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -120,7 +120,7 @@ static void au_wkq_run(struct au_wkinfo *wkinfo, unsigned int flags)
 
 	au_dbg_verify_kthread();
 	if (flags & AuWkq_WAIT) {
-		INIT_WORK_ON_STACK(&wkinfo->wk, wkq_func);
+		INIT_WORK_ONSTACK(&wkinfo->wk, wkq_func);
 		wkq = au_wkq[AuWkq_INORMAL].wkq;
 		if (flags & AuWkq_PRE)
 			wkq = au_wkq[AuWkq_IPRE].wkq;

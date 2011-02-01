@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,6 +32,8 @@ static void au_br_do_free(struct au_branch *br)
 	int i;
 	struct au_wbr *wbr;
 	struct au_dykey **key;
+
+	au_hnotify_fin_br(br);
 
 	if (br->br_xino.xi_file)
 		fput(br->br_xino.xi_file);
@@ -124,13 +126,17 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 	if (unlikely(!add_branch))
 		goto out;
 
+	err = au_hnotify_init_br(add_branch, perm);
+	if (unlikely(err))
+		goto out_br;
+
 	add_branch->br_wbr = NULL;
 	if (au_br_writable(perm)) {
 		/* may be freed separately at changing the branch permission */
 		add_branch->br_wbr = kmalloc(sizeof(*add_branch->br_wbr),
 					     GFP_NOFS);
 		if (unlikely(!add_branch->br_wbr))
-			goto out_br;
+			goto out_hnotify;
 	}
 
 	err = au_sbr_realloc(au_sbi(sb), new_nbranch);
@@ -143,6 +149,8 @@ static struct au_branch *au_br_alloc(struct super_block *sb, int new_nbranch,
 
 	kfree(add_branch->br_wbr);
 
+out_hnotify:
+	au_hnotify_fin_br(add_branch);
 out_br:
 	kfree(add_branch);
 out:
@@ -496,7 +504,7 @@ int au_br_add(struct super_block *sb, struct au_opt_add *add, int remount)
 
 	/*
 	 * this test/set prevents aufs from handling unnecesary notify events
-	 * of xino files, in a case of re-adding a writable branch which was
+	 * of xino files, in case of re-adding a writable branch which was
 	 * once detached from aufs.
 	 */
 	if (au_xino_brid(sb) < 0
@@ -842,7 +850,7 @@ static void au_warn_ima(void)
 {
 #ifdef CONFIG_IMA
 	/* since it doesn't support mark_files_ro() */
-	AuWarn1("RW -> RO makes IMA to produce wrong message");
+	AuWarn1("RW -> RO makes IMA to produce wrong message\n");
 #endif
 }
 
@@ -961,7 +969,9 @@ static int au_br_mod_files_ro(struct super_block *sb, aufs_bindex_t bindex)
 		hfile = &au_fi(file)->fi_htop;
 		hf = hfile->hf_file;
 		/* fi_read_unlock(file); */
+		spin_lock(&hf->f_lock);
 		hf->f_mode &= ~FMODE_WRITE;
+		spin_unlock(&hf->f_lock);
 		if (!file_check_writeable(hf)) {
 			file_release_write(hf);
 			mnt_drop_write(hf->f_vfsmnt);

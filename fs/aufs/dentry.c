@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -267,9 +267,11 @@ int au_lkup_dentry(struct dentry *dentry, aufs_bindex_t bstart, mode_t type,
 	}
 	err = npositive;
 	if (unlikely(!au_opt_test(au_mntflags(dentry->d_sb), UDBA_NONE)
-		     && au_dbstart(dentry) < 0))
-		/* both of real entry and whiteout found */
+		     && au_dbstart(dentry) < 0)) {
 		err = -EIO;
+		AuIOErr("both of real entry and whiteout found, %.*s, err %d\n",
+			AuDLNPair(dentry), err);
+	}
 
 out_parent:
 	dput(parent);
@@ -320,8 +322,8 @@ int au_lkup_neg(struct dentry *dentry, aufs_bindex_t bindex)
 		goto out;
 	if (unlikely(h_dentry->d_inode)) {
 		err = -EIO;
-		AuIOErr("b%d %.*s should be negative.\n",
-			bindex, AuDLNPair(h_dentry));
+		AuIOErr("%.*s should be negative on b%d.\n",
+			AuDLNPair(h_dentry), bindex);
 		dput(h_dentry);
 		goto out;
 	}
@@ -426,10 +428,11 @@ int au_h_verify(struct dentry *h_dentry, unsigned int udba, struct inode *h_dir,
 	int err;
 
 	err = 0;
-	if (udba == AuOpt_UDBA_REVAL) {
+	if (udba == AuOpt_UDBA_REVAL
+	    && !au_test_fs_remote(h_dentry->d_sb)) {
 		IMustLock(h_dir);
 		err = (h_dentry->d_parent->d_inode != h_dir);
-	} else if (udba == AuOpt_UDBA_HNOTIFY)
+	} else if (udba != AuOpt_UDBA_NONE)
 		err = au_h_verify_dentry(h_dentry, h_parent, br);
 
 	return err;
@@ -658,6 +661,7 @@ static int au_refresh_by_dinfo(struct dentry *dentry, struct au_dinfo *dinfo,
 				au_set_h_dptr(dentry, tmp->di_bstart,
 					      dget(hd->hd_dentry));
 			}
+			au_dbg_verify_dinode(dentry);
 		} else {
 			AuDbg("negative --> positive\n");
 			/*
@@ -669,10 +673,12 @@ static int au_refresh_by_dinfo(struct dentry *dentry, struct au_dinfo *dinfo,
 			 */
 			d_drop(dentry);
 			/* au_di_swap(tmp, dinfo); */
+			au_dbg_verify_dinode(dentry);
 		}
 	} else {
 		AuDbg("positive originally\n");
 		/* inode may be NULL */
+		AuDebugOn(inode && (inode->i_mode & S_IFMT) != orig_h.mode);
 		if (!tmp_h.inode) {
 			AuDbg("positive --> negative\n");
 			/* or bypassing aufs */
@@ -681,6 +687,7 @@ static int au_refresh_by_dinfo(struct dentry *dentry, struct au_dinfo *dinfo,
 				dinfo->di_bwh = tmp->di_bwh;
 			if (inode)
 				err = au_refresh_hinode_self(inode);
+			au_dbg_verify_dinode(dentry);
 		} else if (orig_h.mode == tmp_h.mode) {
 			AuDbg("positive --> positive, same type\n");
 			if (!S_ISDIR(orig_h.mode)
@@ -692,6 +699,7 @@ static int au_refresh_by_dinfo(struct dentry *dentry, struct au_dinfo *dinfo,
 				au_hide(dentry);
 				if (inode)
 					err = au_refresh_hinode_self(inode);
+				au_dbg_verify_dinode(dentry);
 			} else {
 				/* fill empty slots */
 				if (dinfo->di_bstart > tmp->di_bstart)
@@ -718,6 +726,7 @@ static int au_refresh_by_dinfo(struct dentry *dentry, struct au_dinfo *dinfo,
 						      dget(h_dentry));
 				}
 				err = au_refresh_hinode(inode, dentry);
+				au_dbg_verify_dinode(dentry);
 			}
 		} else {
 			AuDbg("positive --> positive, different type\n");
@@ -725,6 +734,7 @@ static int au_refresh_by_dinfo(struct dentry *dentry, struct au_dinfo *dinfo,
 			au_hide(dentry);
 			if (inode)
 				err = au_refresh_hinode_self(inode);
+			au_dbg_verify_dinode(dentry);
 		}
 	}
 
@@ -763,6 +773,7 @@ int au_refresh_dentry(struct dentry *dentry, struct dentry *parent)
 		AuDebugOn(au_dbstart(dentry) < 0 && au_dbend(dentry) >= 0);
 		if (inode)
 			err = au_refresh_hinode_self(inode);
+		au_dbg_verify_dinode(dentry);
 		if (!err)
 			goto out_dgen; /* success */
 		goto out;
@@ -789,6 +800,7 @@ int au_refresh_dentry(struct dentry *dentry, struct dentry *parent)
 		/* compare/refresh by dinfo */
 		AuDbgDentry(dentry);
 		err = au_refresh_by_dinfo(dentry, dinfo, tmp);
+		au_dbg_verify_dinode(dentry);
 		AuTraceErr(err);
 	}
 	au_rw_write_unlock(&tmp->di_rwsem);
@@ -999,7 +1011,7 @@ int au_reval_dpath(struct dentry *dentry, unsigned int sigen)
 
 		inode = d->d_inode;
 		if (d != dentry)
-			di_write_lock_child(d);
+			di_write_lock_child2(d);
 
 		/* someone might update our dentry while we were sleeping */
 		if (au_digen_test(d, sigen)) {
@@ -1085,9 +1097,11 @@ static int aufs_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 	}
 
 	err = h_d_revalidate(dentry, inode, nd, do_udba);
-	if (unlikely(!err && do_udba && au_dbstart(dentry) < 0))
-		/* both of real entry and whiteout found */
+	if (unlikely(!err && do_udba && au_dbstart(dentry) < 0)) {
 		err = -EIO;
+		AuDbg("both of real entry and whiteout found, %.*s, err %d\n",
+		      AuDLNPair(dentry), err);
+	}
 	goto out_inval;
 
 out_dgrade:

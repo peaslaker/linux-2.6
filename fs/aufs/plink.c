@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -67,10 +67,8 @@ int au_plink_maint(struct super_block *sb, int flags)
 		goto out;
 
 	if (au_ftest_lock(flags, NOPLMW)) {
-		/*
-		 * todo: debug by lockdep, if there is no i_mutex lock in VFS,
-		 * we don't need to wait.
-		 */
+		/* if there is no i_mutex lock in VFS, we don't need to wait */
+		/* AuDebugOn(!lockdep_depth(current)); */
 		while (sbi->si_plink_maint_pid) {
 			si_read_unlock(sb);
 			/* gave up wake_up_bit() */
@@ -91,15 +89,10 @@ out:
 
 void au_plink_maint_leave(struct au_sbinfo *sbinfo)
 {
-	int iam;
-
 	spin_lock(&sbinfo->si_plink_maint_lock);
-	iam = (sbinfo->si_plink_maint_pid == current->pid);
-	if (iam)
-		sbinfo->si_plink_maint_pid = 0;
+	sbinfo->si_plink_maint_pid = 0;
 	spin_unlock(&sbinfo->si_plink_maint_lock);
-	if (iam)
-		wake_up_all(&sbinfo->si_plink_wq);
+	wake_up_all(&sbinfo->si_plink_wq);
 }
 
 int au_plink_maint_enter(struct super_block *sb)

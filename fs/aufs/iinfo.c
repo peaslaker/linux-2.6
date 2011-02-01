@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -91,7 +91,7 @@ void au_set_h_iptr(struct inode *inode, aufs_bindex_t bindex,
 
 		if (au_ftest_hi(flags, HNOTIFY)
 		    && au_br_hnotifyable(br->br_perm)) {
-			err = au_hn_alloc(hinode, inode, h_inode);
+			err = au_hn_alloc(hinode, inode);
 			if (unlikely(err))
 				AuIOErr1("au_hn_alloc() %d\n", err);
 		}

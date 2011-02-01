@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -233,10 +233,13 @@ void di_read_lock(struct dentry *d, int flags, unsigned int lsc)
 void di_read_unlock(struct dentry *d, int flags)
 {
 	if (d->d_inode) {
-		if (au_ftest_lock(flags, IW))
+		if (au_ftest_lock(flags, IW)) {
+			au_dbg_verify_dinode(d);
 			ii_write_unlock(d->d_inode);
-		else if (au_ftest_lock(flags, IR))
+		} else if (au_ftest_lock(flags, IR)) {
+			au_dbg_verify_dinode(d);
 			ii_read_unlock(d->d_inode);
+		}
 	}
 	au_rw_read_unlock(&au_di(d)->di_rwsem);
 }
@@ -257,6 +260,7 @@ void di_write_lock(struct dentry *d, unsigned int lsc)
 
 void di_write_unlock(struct dentry *d)
 {
+	au_dbg_verify_dinode(d);
 	if (d->d_inode)
 		ii_write_unlock(d->d_inode);
 	au_rw_write_unlock(&au_di(d)->di_rwsem);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -80,6 +80,11 @@ struct au_branch {
 	/* xino truncation */
 	blkcnt_t		br_xino_upper;	/* watermark in blocks */
 	atomic_t		br_xino_running;
+
+#ifdef CONFIG_AUFS_HFSNOTIFY
+	struct fsnotify_group	*br_hfsn_group;
+	struct fsnotify_ops	br_hfsn_ops;
+#endif
 
 #ifdef CONFIG_SYSFS
 	/* an entry under sysfs per mount-point */

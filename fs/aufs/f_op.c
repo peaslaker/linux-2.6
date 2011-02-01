@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Junjiro R. Okajima
+ * Copyright (C) 2005-2011 Junjiro R. Okajima
  *
  * This program, aufs is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -881,6 +881,7 @@ const struct file_operations aufs_file_fop = {
 	 * in aufs, it may be a real file and may confuse users by UDBA.
 	 */
 	/* .llseek		= generic_file_llseek, */
+	.llseek		= default_llseek,
 
 	.read		= aufs_read,
 	.write		= aufs_write,
