@@ -70,6 +70,12 @@ config MACH_GOFLEXNET
           Say 'Y' here if you want your kernel to support the
           Seagate GoFlex Net.
 
+config MACH_GOFLEXHOME
+        bool "Seagate GoFlex Home"
+        help
+          Say 'Y' here if you want your kernel to support the
+          Seagate GoFlex Home.
+
 config MACH_OPENRD
         bool
 
